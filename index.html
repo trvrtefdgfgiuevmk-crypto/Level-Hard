@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Level Hard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;900&display=swap');
+
+        :root {
+            --bg-game: #1a1a1a;
+            --platform: #444;
+            --spike-idle: #ff3333;
+            --spike-active: #ff0000;
+            --portal: #00f2ff;
+        }
+
+        body {
+            background-color: #050505;
+            color: #fff;
+            font-family: 'Outfit', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 450px;
+            background-color: #222;
+            overflow: hidden;
+            border-radius: 12px;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
+            border: 4px solid #333;
+        }
+
+        /* Tag de Dono */
+        #owner-tag {
+            position: absolute;
+            white-space: nowrap;
+            font-weight: 900;
+            font-size: 12px;
+            text-align: center;
+            transform: translateY(-55px);
+            z-index: 100;
+            display: none;
+        }
+        .owner-name { color: #fff; text-shadow: 0 0 5px #00f2ff; }
+        .owner-badge { 
+            background: linear-gradient(90deg, #ff00cc, #3333ff);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 5px;
+            animation: glow 1s infinite alternate;
+        }
+
+        @keyframes glow {
+            from { box-shadow: 0 0 5px #ff00cc; }
+            to { box-shadow: 0 0 15px #3333ff; }
+        }
+
+        /* Personagem */
+        #player {
+            position: absolute;
+            width: 30px;
+            height: 42px;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .player-head {
+            width: 26px;
+            height: 26px;
+            background: #fff;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-around;
+            padding-top: 6px;
+        }
+
+        .eye { width: 5px; height: 8px; background: #000; border-radius: 50%; }
+        .player-body { width: 22px; height: 12px; background: #ddd; border-radius: 3px; margin-top: -2px; }
+        .player-leg { width: 6px; height: 10px; background: #bbb; position: absolute; bottom: 0; }
+        .leg-l { left: 6px; }
+        .leg-r { right: 6px; }
+
+        /* Cenário */
+        .platform { position: absolute; background-color: #444; border-top: 4px solid #666; z-index: 20; }
+        
+        .spike-container { position: absolute; width: 30px; height: 30px; z-index: 15; opacity: 0; transition: opacity 0.05s; }
+        .spike-container.revealed { opacity: 1; }
+        .spike-visual {
+            position: absolute; bottom: -35px; width: 0; height: 0;
+            border-left: 15px solid transparent; border-right: 15px solid transparent;
+            border-bottom: 30px solid var(--spike-idle);
+            transition: bottom 0.1s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .spike-visual.active { bottom: 0px; border-bottom-color: var(--spike-active); }
+
+        .portal {
+            position: absolute; width: 50px; height: 70px;
+            background: radial-gradient(circle, var(--portal), #0033ff, transparent);
+            border-radius: 50%; z-index: 10;
+            animation: portalPulse 1.5s infinite alternate;
+            box-shadow: 0 0 30px var(--portal);
+        }
+        @keyframes portalPulse { from { transform: scale(0.9); opacity: 0.7; } to { transform: scale(1.1); opacity: 1; } }
+
+        /* Admin UI */
+        .modal {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.85);
+            display: none; flex-direction: column; justify-content: center;
+            align-items: center; z-index: 200;
+        }
+
+        .panel-content {
+            background: #111; border: 2px solid #00f2ff; padding: 25px;
+            border-radius: 12px; width: 350px; text-align: center;
+        }
+
+        .admin-list {
+            text-align: left; max-height: 200px; overflow-y: auto;
+            margin-top: 15px; padding: 10px; background: #000; border-radius: 8px;
+        }
+
+        .admin-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #222; font-size: 14px; }
+        .btn-join { background: #00f2ff; color: #000; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; border: none; font-size: 11px; }
+        .btn-join:hover { background: #fff; }
+
+        .btn-confirm { background: #22c55e; color: white; padding: 8px 20px; border-radius: 6px; margin: 5px; }
+        .btn-leave { background: #ef4444; color: white; padding: 8px 20px; border-radius: 6px; margin: 5px; }
+
+        #hud { position: absolute; top: 15px; left: 20px; z-index: 60; font-weight: 900; display: flex; gap: 20px; }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Chave Secreta -->
+        <div id="key-modal" class="modal">
+            <div class="panel-content">
+                <h2 class="text-xl font-bold mb-4 text-cyan-400">ENTER THE KEY</h2>
+                <input type="password" id="secret-key-input" class="w-full bg-black border border-gray-700 p-2 rounded mb-4 text-center" placeholder="Chave de Acesso...">
+                <div class="flex justify-center">
+                    <button onclick="closeSecret()" class="btn-leave">Leave</button>
+                    <button onclick="checkKey()" class="btn-confirm">Confirm</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Painel Admin -->
+        <div id="admin-modal" class="modal">
+            <div class="panel-content w-96">
+                <h2 class="text-2xl font-black mb-2 text-cyan-400">ADMIN PANEL</h2>
+                
+                <div class="mb-4">
+                    <h3 class="text-left text-xs text-gray-500 uppercase font-bold">List Players</h3>
+                    <div class="admin-list">
+                        <div class="admin-item"><span>C̷a̷b̷r̷a̷l̷D̷e̷v̷💤 (Dono)</span><span class="text-cyan-400">Host</span></div>
+                        <div class="admin-item"><span>Player_772</span><span class="text-green-500">Jogando</span></div>
+                        <div class="admin-item"><span>Guest_99</span><span class="text-green-500">Jogando</span></div>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <h3 class="text-left text-xs text-gray-500 uppercase font-bold">List Servers</h3>
+                    <div class="admin-list">
+                        <div class="admin-item"><span>SV_BRAZIL (C̷a̷b̷r̷a̷l̷D̷e̷v̷💤)</span> <button class="btn-join" onclick="simulateJoin('C̷a̷b̷r̷a̷l̷D̷e̷v̷💤')">JOIN</button></div>
+                        <div class="admin-item"><span>SV_USA (Player_772)</span> <button class="btn-join" onclick="simulateJoin('Player_772')">JOIN</button></div>
+                    </div>
+                </div>
+
+                <button onclick="closeAdmin()" class="btn-leave w-full">Sair do Painel</button>
+            </div>
+        </div>
+
+        <div id="menu" class="absolute inset-0 bg-black/95 flex flex-col justify-center items-center z-[100]">
+            <h1 class="text-6xl mb-6 font-black italic text-white">LEVEL <span class="text-cyan-400">HARD</span></h1>
+            <button onclick="startGame()" class="bg-white text-black px-12 py-4 rounded-full font-black text-2xl hover:scale-110 transition">JOGAR</button>
+            <p class="mt-8 text-gray-500 text-sm">Aperte CTRL + B para segredos</p>
+        </div>
+
+        <div id="hud">
+            <div>FASE: <span id="cur-lvl-txt" class="text-cyan-400">1</span></div>
+            <div>MORTES: <span id="death-txt" class="text-red-500">0</span></div>
+        </div>
+
+        <div id="player">
+            <div id="owner-tag">
+                <span class="owner-name">C̷a̷b̷r̷a̷l̷D̷e̷v̷💤</span><span class="owner-badge">Owner</span>
+            </div>
+            <div class="player-head"><div class="eye"></div><div class="eye"></div></div>
+            <div class="player-body"></div>
+            <div class="player-leg leg-l"></div>
+            <div class="player-leg leg-r"></div>
+        </div>
+
+        <div id="world"></div>
+    </div>
+
+    <script>
+        const world = document.getElementById('world');
+        const playerEl = document.getElementById('player');
+        const ownerTag = document.getElementById('owner-tag');
+        const menu = document.getElementById('menu');
+        const keyModal = document.getElementById('key-modal');
+        const adminModal = document.getElementById('admin-modal');
+        const keyInput = document.getElementById('secret-key-input');
+        
+        let currentLevel = 1;
+        let deaths = 0;
+        let isAdmin = false;
+        let levelDataCache = null; // Guardar a fase atual para não mudar ao morrer
+
+        let gameState = {
+            active: false,
+            player: { x: 50, y: 300, vx: 0, vy: 0, w: 30, h: 42, grounded: false },
+            keys: {},
+            platforms: [],
+            spikes: [],
+            goal: null
+        };
+
+        // Função para gerar o nível baseada num número (semente)
+        function generateLevel(n) {
+            // Usamos uma lógica fixa baseada em 'n' para que o nível seja sempre o mesmo para aquele número
+            const platCount = 4;
+            const levelPlatforms = [{ x: 0, y: 380, w: 120, h: 70 }];
+            
+            let lastX = 120;
+            for(let j=0; j < platCount; j++) {
+                const gap = 80 + (Math.abs(Math.sin(n + j)) * 50);
+                const width = 80 + (Math.abs(Math.cos(n * j)) * 60);
+                const yPos = 380 - (Math.abs(Math.sin(n * 2)) * 40);
+                levelPlatforms.push({ x: lastX + gap, y: yPos, w: width, h: 70 });
+                lastX += gap + width;
+            }
+
+            const levelSpikes = [];
+            for(let k=0; k < 5; k++) {
+                levelSpikes.push({ 
+                    x: 180 + (Math.abs(Math.sin(k * n)) * (lastX - 300)), 
+                    y: 380, 
+                    triggerDist: 90 
+                });
+            }
+
+            return {
+                start: { x: 50, y: 300 },
+                platforms: levelPlatforms,
+                spikes: levelSpikes,
+                goal: { x: Math.min(lastX - 60, 730), y: 280 }
+            };
+        }
+
+        function loadLevel(num, forcedData = null) {
+            // Se forcedData existe (usado no JOIN), usamos ele. Se não, geramos ou usamos o cache.
+            if (forcedData) {
+                levelDataCache = forcedData;
+            } else if (!levelDataCache || currentLevel !== num) {
+                levelDataCache = generateLevel(num);
+            }
+
+            const data = levelDataCache;
+            world.innerHTML = '';
+            gameState.platforms = [];
+            gameState.spikes = [];
+            document.getElementById('cur-lvl-txt').innerText = num;
+
+            gameState.player.x = data.start.x;
+            gameState.player.y = data.start.y;
+            gameState.player.vx = 0;
+            gameState.player.vy = 0;
+
+            ownerTag.style.display = isAdmin ? 'block' : 'none';
+
+            const portal = document.createElement('div');
+            portal.className = 'portal';
+            portal.style.left = data.goal.x + 'px';
+            portal.style.top = data.goal.y + 'px';
+            world.appendChild(portal);
+            gameState.goal = { ...data.goal, w: 50, h: 70 };
+
+            data.platforms.forEach(p => {
+                const el = document.createElement('div');
+                el.className = 'platform';
+                el.style.width = p.w + 'px'; el.style.height = p.h + 'px';
+                el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+                world.appendChild(el);
+                gameState.platforms.push({ ...p, el, cx: p.x, cy: p.y });
+            });
+
+            data.spikes.forEach(s => {
+                const cont = document.createElement('div');
+                cont.className = 'spike-container';
+                cont.style.left = s.x + 'px'; cont.style.top = '350px';
+                const vis = document.createElement('div');
+                vis.className = 'spike-visual';
+                cont.appendChild(vis);
+                world.appendChild(cont);
+                gameState.spikes.push({ ...s, container: cont, visual: vis, active: false, popped: false });
+            });
+        }
+
+        function startGame() { menu.style.display = 'none'; loadLevel(currentLevel); gameState.active = true; }
+
+        function checkKey() {
+            if (keyInput.value === "cabraldev_starsky_10_22") {
+                isAdmin = true;
+                keyModal.style.display = 'none';
+                adminModal.style.display = 'flex';
+                ownerTag.style.display = 'block';
+                keyInput.value = "";
+            } else {
+                keyInput.style.borderColor = "red";
+                setTimeout(() => keyInput.style.borderColor = "", 1000);
+            }
+        }
+
+        // Função para simular a entrada no servidor
+        function simulateJoin(target) {
+            adminModal.style.display = 'none';
+            gameState.active = true;
+            // Cria um nível customizado impossível para simular o server
+            const crazyLevel = generateLevel(999 + Math.random());
+            loadLevel(currentLevel, crazyLevel);
+            console.log("Entrou no servidor de: " + target);
+        }
+
+        function closeSecret() { keyModal.style.display = 'none'; gameState.active = true; }
+        function closeAdmin() { adminModal.style.display = 'none'; gameState.active = true; }
+
+        function die() {
+            if (!gameState.active) return;
+            gameState.active = false;
+            deaths++;
+            document.getElementById('death-txt').innerText = deaths;
+            playerEl.style.opacity = '0';
+            setTimeout(() => {
+                playerEl.style.opacity = '1';
+                loadLevel(currentLevel); // Agora carrega o cache, mantendo a fase igual
+                gameState.active = true;
+            }, 300);
+        }
+
+        function gameLoop() {
+            if (!gameState.active) { requestAnimationFrame(gameLoop); return; }
+
+            const p = gameState.player;
+            let mL = gameState.keys['ArrowLeft'] || gameState.keys['KeyA'];
+            let mR = gameState.keys['ArrowRight'] || gameState.keys['KeyD'];
+
+            if (mL) p.vx = -6; else if (mR) p.vx = 6; else p.vx *= 0.8;
+            if ((gameState.keys['ArrowUp'] || gameState.keys['KeyW'] || gameState.keys['Space']) && p.grounded) {
+                p.vy = -15; p.grounded = false;
+            }
+
+            p.vy += 0.9; p.x += p.vx; p.y += p.vy; p.grounded = false;
+
+            gameState.platforms.forEach(plat => {
+                if (p.x < plat.cx + plat.w && p.x + p.w > plat.cx && p.y < plat.cy + plat.h && p.y + p.h > plat.cy) {
+                    if (p.vy > 0 && p.y + p.h - p.vy <= plat.cy + 12) {
+                        p.y = plat.cy - p.h; p.vy = 0; p.grounded = true;
+                    }
+                }
+            });
+
+            gameState.spikes.forEach(s => {
+                const dist = Math.abs((p.x + p.w/2) - (s.x + 15));
+                if (dist < s.triggerDist && !s.popped) {
+                    s.popped = true; s.container.classList.add('revealed');
+                    s.visual.classList.add('active'); s.active = true;
+                }
+                if (s.active && p.x < s.x + 22 && p.x + p.w > s.x + 8 && p.y + p.h > 352) die();
+            });
+
+            const g = gameState.goal;
+            if (p.x < g.x + g.w && p.x + p.w > g.x && p.y < g.y + g.h && p.y + p.h > g.y) {
+                gameState.active = false; currentLevel++;
+                levelDataCache = null; // Limpa o cache para gerar a próxima fase
+                setTimeout(() => { loadLevel(currentLevel); gameState.active = true; }, 300);
+            }
+
+            if (p.y > 500) die();
+            if (p.x < 0) p.x = 0;
+            if (p.x > 770) p.x = 770;
+
+            playerEl.style.left = p.x + 'px'; playerEl.style.top = p.y + 'px';
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.addEventListener('keydown', e => {
+            gameState.keys[e.code] = true;
+            if (e.ctrlKey && e.code === 'KeyB') {
+                e.preventDefault();
+                gameState.active = false;
+                keyModal.style.display = 'flex';
+                keyInput.focus();
+            }
+        });
+        window.addEventListener('keyup', e => gameState.keys[e.code] = false);
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
